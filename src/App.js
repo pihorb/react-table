@@ -1,25 +1,30 @@
-import React, { Component } from 'react'
+import React, { Component, Fragment } from 'react'
 import _ from 'lodash'
+import ReactPaginate from 'react-paginate'
 
+import DetailRowView from './Components/DetailRowView'
+import ModeSelector from './Components/ModeSelector'
+import TableSearch from './Components/TableSearch'
 import Loader from './Components/Loader'
 import Table from './Components/Table'
-import DetailRowView from './Components/DetailRowView'
+
 class App extends Component {
   constructor(props) {
     super(props)
     this.state = {
-      isLoading: true,
+      isModeSelected: false,
+      isLoading: false,
       data: [],
       sort: 'asc',
       sortField: 'id',
+      search: '',
       row: null,
+      currentPage: 0,
     }
   }
 
-  async componentDidMount() {
-    const response = await fetch(
-      `http://www.filltext.com/?rows=32&id={number|1000}&firstName={firstName}&lastName={lastName}&email={email}&phone={phone|(xxx)xxx-xx-xx}&address={addressObject}&description={lorem|32}`
-    )
+  async fetchData(url) {
+    const response = await fetch(url)
     const data = await response.json()
 
     this.setState({
@@ -29,48 +34,123 @@ class App extends Component {
   }
 
   onSort = (sortField) => {
-    let sortType = null
+    let sort = null
     const clonedData = this.state.data.concat()
-    
-    if(this.state.sortField !== sortField) {
-      sortType = 'asc'
+
+    if (this.state.sortField !== sortField) {
+      sort = 'asc'
     } else {
-      sortType = this.state.sort === 'asc' ? 'desc' : 'asc'
+      sort = this.state.sort === 'asc' ? 'desc' : 'asc'
     }
-    
-    const orderedData = _.orderBy(clonedData, sortField, sortType)
-    
+
+    const data = _.orderBy(clonedData, sortField, sort)
+
+    this.setState({ data, sort, sortField })
+  }
+
+  modeSelectHandler = (url) => {
     this.setState({
-      data: orderedData,
-      sort: sortType,
-      sortField
+      isLoading: true,
+      isModeSelected: true,
     })
+
+    this.fetchData(url)
   }
 
   onRowSelect = (row) => {
     this.setState({ row })
   }
 
-  render() {
-    return (
-      <div className="container">
-        {
-          this.state.isLoading 
-            ? <Loader /> 
-            : <Table 
-                data={this.state.data} 
-                onSort={this.onSort}
-                sort={this.state.sort}
-                sortField={this.state.sortField}
-                onRowSelect={this.onRowSelect}
-              />
-        }
+  pageChangeHandler = ({ selected }) => {
+    this.setState({ currentPage: selected })
+  }
 
-        {
-          this.state.row
-            ? <DetailRowView person={this.state.row} />
-            : null
-        }
+  searchHandler = (search) => {
+    this.setState({ search, currentPage: 0 })
+  }
+
+  getFilteredData = () => {
+    const { data, search } = this.state
+
+    if (!search) {
+      return data
+    }
+
+    return data.filter(item => {
+      return (
+        item['firstName'].toLowerCase().includes(search.toLowerCase())
+        || item['lastName'].toLowerCase().includes(search.toLowerCase())
+        || item['email'].toLowerCase().includes(search.toLowerCase())
+      )
+    })
+  }
+
+  render() {
+    const pageSize = 50
+
+    const filteredData = this.getFilteredData()
+    const pageCount = Math.ceil(filteredData.length / pageSize)
+    
+    const displayData = _.chunk(filteredData, pageSize)[
+      this.state.currentPage
+    ] || []
+
+    if (!this.state.isModeSelected) {
+      return (
+        <div className="container">
+          <ModeSelector onSelect={this.modeSelectHandler} />
+        </div>
+      )
+    }
+    return (
+      <div
+        className="container"
+        style={{
+          display: 'flex',
+          justifyContent: 'center',
+          flexDirection: 'column',
+          alignItems: 'center',
+          minHeight: '500px',
+        }}
+      >
+        {this.state.isLoading ? (
+          <Loader />
+        ) : (
+          <Fragment>
+            <TableSearch search={this.searchHandler} />
+            <Table
+              data={displayData}
+              onSort={this.onSort}
+              sort={this.state.sort}
+              sortField={this.state.sortField}
+              onRowSelect={this.onRowSelect}
+            />
+          </Fragment>
+        )}
+
+        {this.state.data.length > pageSize ? (
+          <ReactPaginate
+            previousLabel={'<'}
+            nextLabel={'>'}
+            breakLabel={'...'}
+            breakClassName={'break-me'}
+            pageCount={pageCount}
+            marginPagesDisplayed={2}
+            pageRangeDisplayed={5}
+            onPageChange={this.pageChangeHandler}
+            containerClassName={'pagination'}
+            activeClassName={'active'}
+            pageClassName="page-item"
+            pageLinkClassName="page-link"
+            previousClassName="page-item"
+            nextClassName="page-item"
+            previousLinkClassName="page-link"
+            nextLinkClassName="page-link"
+            forcePage={this.state.currentPage}
+          />
+        ) : null}
+
+        {this.state.row ? <DetailRowView person={this.state.row} /> : null}
       </div>
     )
   }
